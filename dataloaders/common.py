@@ -104,7 +104,7 @@ class PairedDataset(Dataset):
             if 'n_elements' <= # of datasets, then we randomly choose a subset of datasets,
                 then randomly choose a sample from each dataset in the subset
                 e.g. [[ds1_3, ds2_1, ds3_1], [ds4_1, ds2_3, ds3_2], ...]
-            if 'n_element' is a list of int, say [C_1, C_2, C_3, ..., C_k], we first
+            if 'n_elements' is a list of int, say [C_1, C_2, C_3, ..., C_k], we first
                 randomly choose k(k < # of datasets) datasets, then draw C_1, C_2, ..., C_k samples
                 from each dataset respectively.
                 Note the total number of elements will be (C_1 + C_2 + ... + C_k).
