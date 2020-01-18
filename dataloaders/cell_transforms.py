@@ -23,16 +23,16 @@ class Resize(object):
     def __call__(self, sample):
         img, label = sample['image'], sample['label']
         inst = sample['inst']
-        h, w = img.size
+        h, w = img.size[::-1]
         new_h, new_w = self.size
-        
-        if new_h < h and  new_w < w:
-            img = tr_F.resize(img, self.size, interpolation=Image.ANTIALIAS)
-        else:
-            img = tr_F.resize(img, self.size, interpolation=Image.BILINEAR)
 
-        label = tr_F.resize(label, self.size, interpolation=Image.NEAREST)
-        inst = tr_F.resize(inst, self.size, interpolation=Image.NEAREST)
+        if new_h < h and  new_w < w:
+            img = tr_F.resize(img, self.size[::-1], interpolation=Image.ANTIALIAS)
+        else:
+            img = tr_F.resize(img, self.size[::-1], interpolation=Image.BILINEAR)
+
+        label = tr_F.resize(label, self.size[::-1], interpolation=Image.NEAREST)
+        inst = tr_F.resize(inst, self.size[::-1], interpolation=Image.NEAREST)
 
         sample['image'] = img
         sample['label'] = label
@@ -58,7 +58,7 @@ class RandomResize(object):
     def __call__(self, sample):
         img, label = sample['image'], sample['label']
         inst = sample['inst']
-        h, w = img.size
+        h, w = img.size[::-1]
         area = h * w
         random_scale = random.uniform(*self.scale)
         target_area = random_scale * area
@@ -71,11 +71,11 @@ class RandomResize(object):
 
         if random.random() < self.prob:
             if new_h < h and  new_w < w:
-                img = tr_F.resize(img, new_size, interpolation=Image.ANTIALIAS)
+                img = tr_F.resize(img, new_size[::-1], interpolation=Image.ANTIALIAS)
             else:
-                img = tr_F.resize(img, new_size, interpolation=Image.BILINEAR)
-            label = tr_F.resize(label, new_size, interpolation=Image.NEAREST)
-            inst = tr_F.resize(inst, new_size, interpolation=Image.NEAREST)
+                img = tr_F.resize(img, new_size[::-1], interpolation=Image.BILINEAR)
+            label = tr_F.resize(label, new_size[::-1], interpolation=Image.NEAREST)
+            inst = tr_F.resize(inst, new_size[::-1], interpolation=Image.NEAREST)
         
         sample['image'] = img
         sample['label'] = label
@@ -158,6 +158,67 @@ class RandomVerticalFlip(object):
         sample['inst'] = inst
         return sample
 
+class RandomCrop(object):
+    """Crop the images/masks at the same random location.
+    Args:
+        size (list): The desired output size of the cropped images/masks.
+    """
+    def __init__(self, size):
+        self.size = size
+
+    def __call__(self, sample):
+        
+        img, label = sample['image'], sample['label']
+        inst = sample['inst']
+
+        new_img_h0, new_img_hn, new_img_w0, new_img_wn, img_h0, img_hn, img_w0, img_wn = self._get_coordinates(img, self.size)
+        
+        cropped_img = img.crop((img_w0, img_h0, img_wn, img_hn))
+        cropped_label = label.crop((img_w0, img_h0, img_wn, img_hn))
+        cropped_inst = inst.crop((img_w0, img_h0, img_wn, img_hn))
+        
+        new_img = Image.new(mode = "RGB", size = self.size[::-1])
+        new_label = Image.new(mode = "L", size = self.size[::-1])
+        new_inst = Image.new(mode = "I", size = self.size[::-1])
+        new_img.paste(cropped_img)
+        new_label.paste(cropped_label)
+        new_inst.paste(cropped_inst)
+
+        sample['image'] = new_img
+        sample['label'] = new_label
+        sample['inst'] = new_inst
+
+        return sample
+
+    @staticmethod
+    def _get_coordinates(img, size):
+        """Compute the coordinates of the cropped image.
+        Args:
+            img (PIL.Image): The image to be cropped.
+        Returns:
+            coordinates (tuple): The coordinates of the cropped image.
+        """
+       
+        h, w = img.size[::-1]
+        ht, wt = min(size[0], h), min(size[1], w)
+        h_space, w_space = h - size[0], w -size[1]
+        
+        if h_space > 0:
+            new_img_h0 = 0
+            img_h0 = random.randrange(h_space + 1)
+        else:
+            new_img_h0 = random.randrange(-h_space + 1)
+            img_h0 = 0
+        if w_space > 0:
+            new_img_w0 = 0
+            img_w0 = random.randrange(w_space + 1)
+        else:
+            new_img_w0 = random.randrange(-w_space + 1)
+            img_w0 = 0
+
+        return new_img_h0, new_img_h0 + ht, new_img_w0, new_img_w0 + wt, img_h0, img_h0 + ht, img_w0, img_w0 + wt
+
+    
 class ToTensorNormalize(object):
     """
     Convert images/masks to torch.Tensor
