@@ -3,6 +3,7 @@ import random
 
 import torch
 import numpy as np
+import json
 
 def set_seed(seed):
     """
@@ -26,6 +27,15 @@ CLASS_LABELS = {
         1: set(range(1, 81)) - set(range(21, 41)),
         2: set(range(1, 81)) - set(range(41, 61)),
         3: set(range(1, 81)) - set(range(61, 81)),
+    },
+    'FSSCell':{
+        'all': set(range(1, 14)),
+        0: set(range(1, 14)) - set(range(1, 3)),
+        1: set(range(1, 14)) - set(range(3, 5)),
+        2: set(range(1, 14)) - set(range(5, 8)),
+        3: set(range(1, 14)) - set(range(8, 10)),
+        4: set(range(1, 14)) - set(range(10, 12)),
+        'test': set(range(12, 14))
     }
 }
 
