@@ -47,13 +47,15 @@ class FSSCell(BaseDataset):
         id_ = self.ids[idx]
         class_ = id_.split('#', 1)[0]
         name = id_.split('#', 1)[1]
+
         image = Image.open(os.path.join(self._base_dir, class_, name, 'image', f'{name}.png')).convert("RGB")
         semantic_mask = Image.open(os.path.join(self._base_dir, class_, name, 'semantic_mask', f'{name}_semantic_mask.png'))
         instance_mask = np.load(os.path.join(self._base_dir, class_, name, 'instance_mask', f'{name}_instance_mask.npy')).astype(np.int32)
         instance_mask = Image.fromarray(instance_mask)
-        sample = {'image': image,
-                  'label': semantic_mask,
-                  'inst': instance_mask}
+        sample = {'id': id_, 
+                'image': image, 
+                'label': semantic_mask, 
+                'inst': instance_mask}
         
         # Image-level transformation
         if self.transforms is not None:
