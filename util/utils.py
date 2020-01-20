@@ -30,11 +30,11 @@ CLASS_LABELS = {
     },
     'FSSCell':{
         'all': set(range(1, 14)),
-        0: set(range(1, 14)) - set(range(1, 3)),
-        1: set(range(1, 14)) - set(range(3, 5)),
-        2: set(range(1, 14)) - set(range(5, 8)),
-        3: set(range(1, 14)) - set(range(8, 10)),
-        4: set(range(1, 14)) - set(range(10, 12)),
+        0: set(range(1, 12)) - set(range(1, 3)),
+        1: set(range(1, 12)) - set(range(3, 5)),
+        2: set(range(1, 12)) - set(range(5, 8)),
+        3: set(range(1, 12)) - set(range(8, 10)),
+        4: set(range(1, 12)) - set(range(10, 12)),
         'test': set(range(12, 14))
     }
 }
