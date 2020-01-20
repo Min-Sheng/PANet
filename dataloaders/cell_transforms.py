@@ -180,9 +180,9 @@ class RandomCrop(object):
         new_img = Image.new(mode = "RGB", size = self.size[::-1])
         new_label = Image.new(mode = "L", size = self.size[::-1])
         new_inst = Image.new(mode = "I", size = self.size[::-1])
-        new_img.paste(cropped_img)
-        new_label.paste(cropped_label)
-        new_inst.paste(cropped_inst)
+        new_img.paste(cropped_img, (new_img_w0, new_img_h0, new_img_wn, new_img_hn))
+        new_label.paste(cropped_label, (new_img_w0, new_img_h0, new_img_wn, new_img_hn))
+        new_inst.paste(cropped_inst,(new_img_w0, new_img_h0, new_img_wn, new_img_hn))
 
         sample['image'] = new_img
         sample['label'] = new_label
