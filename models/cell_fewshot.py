@@ -1,5 +1,5 @@
 """
-Fewshot Semantic Segmentation
+Fewshot Cell Semantic Segmentation
 """
 
 from collections import OrderedDict
@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 from .vgg import Encoder
 
+from itertools import chain
 
 class FewShotSeg(nn.Module):
     """
@@ -33,17 +34,21 @@ class FewShotSeg(nn.Module):
             ('backbone', Encoder(in_channels, self.pretrained_path)),]))
 
 
-    def forward(self, supp_imgs, fore_mask, back_mask, qry_imgs):
+    def forward(self, supp_imgs, fore_mask, cntr_mask, back_mask, qry_imgs, cnt_query):
         """
         Args:
             supp_imgs: support images
                 way x shot x [B x 3 x H x W], list of lists of tensors
             fore_mask: foreground masks for support images
                 way x shot x [B x H x W], list of lists of tensors
+            cntr_mask: contour masks for support images
+                way x shot x [B x H x W], list of lists of tensors
             back_mask: background masks for support images
                 way x shot x [B x H x W], list of lists of tensors
             qry_imgs: query images
                 N x [B x 3 x H x W], list of tensors
+            cnt_query:  number of query images for each class in the support set
+                list of scalars which corresponds to the indexes of each class in the support set
         """
         n_ways = len(supp_imgs)
         n_shots = len(supp_imgs[0])
@@ -63,9 +68,11 @@ class FewShotSeg(nn.Module):
             n_queries, batch_size, -1, *fts_size)   # N x B x C x H' x W'
         fore_mask = torch.stack([torch.stack(way, dim=0)
                                  for way in fore_mask], dim=0)  # Wa x Sh x B x H x W
+        cntr_mask = torch.stack([torch.stack(way, dim=0)
+                                 for way in cntr_mask], dim=0)  # Wa x Sh x B x H x W
         back_mask = torch.stack([torch.stack(way, dim=0)
                                  for way in back_mask], dim=0)  # Wa x Sh x B x H x W
-
+        
         ###### Compute loss ######
         align_loss = 0
         outputs = []
@@ -73,27 +80,31 @@ class FewShotSeg(nn.Module):
             ###### Extract prototype ######
             supp_fg_fts = [[self.getFeatures(supp_fts[way, shot, [epi]],
                                              fore_mask[way, shot, [epi]])
-                            for shot in range(n_shots)] for way in range(n_ways)]
+                            for shot in range(n_shots)] for way in range(n_ways)] # Wa x Sh x [1 x C]
+            supp_cntr_fts = [[self.getFeatures(supp_fts[way, shot, [epi]],
+                                             cntr_mask[way, shot, [epi]]) 
+                            for shot in range(n_shots)] for way in range(n_ways)] # Wa x Sh x [1 x C]
             supp_bg_fts = [[self.getFeatures(supp_fts[way, shot, [epi]],
                                              back_mask[way, shot, [epi]])
-                            for shot in range(n_shots)] for way in range(n_ways)]
+                            for shot in range(n_shots)] for way in range(n_ways)] # Wa x Sh x [1 x C]
 
             ###### Obtain the prototypes######
-            fg_prototypes, bg_prototype = self.getPrototype(supp_fg_fts, supp_bg_fts)
+            fg_prototypes, cntr_prototypes, bg_prototype = self.getPrototype(supp_fg_fts, supp_cntr_fts, supp_bg_fts)
 
             ###### Compute the distance ######
-            prototypes = [bg_prototype,] + fg_prototypes
-            dist = [self.calDist(qry_fts[:, epi], prototype) for prototype in prototypes]
-            pred = torch.stack(dist, dim=1)  # N x (1 + Wa) x H' x W'
-            outputs.append(F.interpolate(pred, size=img_size, mode='bilinear'))
+            prototypes = [bg_prototype,] + list(chain(*zip(fg_prototypes, cntr_prototypes))) # (1 + 2 x Wa) x [1 x C]
+
+            dist = [self.calDist(qry_fts[:, epi], prototype) for prototype in prototypes] # (1 + 2 x Wa) x [N x H' x W']
+            pred = torch.stack(dist, dim=1)  # N x (1 + 2 x Wa) x H' x W'
+            outputs.append(F.interpolate(pred, size=img_size, mode='bilinear')) # N x (1 + 2 x Wa) x H x W
 
             ###### Prototype alignment loss ######
             if self.config['align'] and self.training:
                 align_loss_epi = self.alignLoss(qry_fts[:, epi], pred, supp_fts[:, :, epi],
-                                                fore_mask[:, :, epi], back_mask[:, :, epi])
+                                                fore_mask[:, :, epi], cntr_mask[:, :, epi], back_mask[:, :, epi], cnt_query)
                 align_loss += align_loss_epi
 
-        output = torch.stack(outputs, dim=1)  # N x B x (1 + Wa) x H x W
+        output = torch.stack(outputs, dim=1)  # N x B x (1 + 2 x Wa) x H x W
         output = output.view(-1, *output.shape[2:])
         return output, align_loss / batch_size
 
@@ -104,9 +115,12 @@ class FewShotSeg(nn.Module):
 
         Args:
             fts: input features
-                expect shape: N x C x H x W
+                expect shape: N x C x H' x W'
             prototype: prototype of one semantic class
                 expect shape: 1 x C
+        Return:
+            dist: distance map
+                expect shape: N x H' x W'
         """
         dist = F.cosine_similarity(fts, prototype[..., None, None], dim=1) * scaler
         return dist
@@ -114,11 +128,13 @@ class FewShotSeg(nn.Module):
 
     def getFeatures(self, fts, mask):
         """
-        Extract foreground and background features via masked average pooling
+        Extract foreground, contour, and background features via masked average pooling
 
         Args:
             fts: input features, expect shape: 1 x C x H' x W'
             mask: binary mask, expect shape: 1 x H x W
+        Return:
+            masked_fts: masked features, expect shape: 1 x C
         """
         fts = F.interpolate(fts, size=mask.shape[-2:], mode='bilinear')
         masked_fts = torch.sum(fts * mask[None, ...], dim=(2, 3)) \
@@ -126,23 +142,33 @@ class FewShotSeg(nn.Module):
         return masked_fts
 
 
-    def getPrototype(self, fg_fts, bg_fts):
+    def getPrototype(self, fg_fts, cntr_fts, bg_fts):
         """
         Average the features to obtain the prototype
 
         Args:
             fg_fts: lists of list of foreground features for each way/shot
                 expect shape: Wa x Sh x [1 x C]
+            cntr_fts: lists of list of contour features for each way/shot
+                expect shape: Wa x Sh x [1 x C]
             bg_fts: lists of list of background features for each way/shot
                 expect shape: Wa x Sh x [1 x C]
+        Return:
+            fg_prototypes: list of foreground prototypes for each way
+                expect shape: Wa x [1 x C]
+            cntr_prototypes: list of contour prototypes for each way
+                expect shape: Wa x [1 x C]
+            bg_prototype: back prototypes for each way
+                expect shape: 1 x C
         """
         n_ways, n_shots = len(fg_fts), len(fg_fts[0])
         fg_prototypes = [sum(way) / n_shots for way in fg_fts]
+        cntr_prototypes = [sum(way) / n_shots for way in cntr_fts]
         bg_prototype = sum([sum(way) / n_shots for way in bg_fts]) / n_ways
-        return fg_prototypes, bg_prototype
+        return fg_prototypes, cntr_prototypes, bg_prototype
 
 
-    def alignLoss(self, qry_fts, pred, supp_fts, fore_mask, back_mask):
+    def alignLoss(self, qry_fts, pred, supp_fts, fore_mask, cntr_mask, back_mask, cnt_query):
         """
         Compute the loss for the prototype alignment branch
 
@@ -155,8 +181,12 @@ class FewShotSeg(nn.Module):
                 expect shape: Wa x Sh x C x H' x W'
             fore_mask: foreground masks for support images
                 expect shape: way x shot x H x W
+            cntr_mask: contour masks for support images
+                expect shape: way x shot x H x W
             back_mask: background masks for support images
                 expect shape: way x shot x H x W
+            cnt_query:  number of query images for each class in the support set
+                list of scalars which corresponds to the indexes of each class in the support set
         """
         n_ways, n_shots = len(fore_mask), len(fore_mask[0])
 
@@ -185,6 +215,7 @@ class FewShotSeg(nn.Module):
                 supp_label = torch.full_like(fore_mask[way, shot], 255,
                                              device=img_fts.device).long()
                 supp_label[fore_mask[way, shot] == 1] = 1
+                supp_label[cntr_mask[way, shot] == 1] = 2
                 supp_label[back_mask[way, shot] == 1] = 0
                 # Compute Loss
                 loss = loss + F.cross_entropy(
