@@ -32,7 +32,7 @@ def cfg():
 
 
     if mode == 'train':
-        dataset = 'VOC'  # 'VOC' or 'COCO'
+        dataset = 'FSSCell'  # 'VOC' or 'COCO'
         n_steps = 30000
         label_sets = 0
         batch_size = 1
@@ -40,6 +40,7 @@ def cfg():
         align_loss_scaler = 1
         ignore_label = 255
         print_interval = 100
+        tbplot_interval = 100
         save_pred_every = 10000
 
         model = {
@@ -60,7 +61,7 @@ def cfg():
 
     elif mode == 'test':
         notrain = False
-        snapshot = './runs/PANet_VOC_sets_0_1way_1shot_[train]/1/snapshots/30000.pth'
+        snapshot = './runs/PANet_FSSCell_sets_0_1way_1shot_[train]/1/snapshots/30000.pth'
         n_runs = 5
         n_steps = 1000
         batch_size = 1
@@ -73,6 +74,8 @@ def cfg():
             dataset = 'VOC'
         elif 'COCO' in snapshot:
             dataset = 'COCO'
+        elif 'FSSCell' in snapshot:
+            dataset = 'FSSCell'
         else:
             raise ValueError('Wrong snapshot name !')
 
@@ -104,10 +107,12 @@ def cfg():
     path = {
         'log_dir': './runs',
         'init_path': './pretrained_model/vgg16-397923af.pth',
-        'VOC':{'data_dir': '../../data/Pascal/VOCdevkit/VOC2012/',
+        'VOC':{'data_dir': '/tmp2//VOCdevkit/VOC2012/',
                'data_split': 'trainaug',},
-        'COCO':{'data_dir': '../../data/COCO/',
+        'COCO':{'data_dir': '/tmp2/COCO/',
                 'data_split': 'train',},
+        'FSSCell':{'data_dir': '/tmp2/FSS-Cell/',
+                'cls_id_table_path': './FSSCell_cls_id.json',},
     }
 
 @ex.config_hook
