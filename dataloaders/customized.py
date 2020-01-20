@@ -226,15 +226,16 @@ def cell_fewShot(paired_sample, n_ways, n_shots, cnt_query):
     
     query_labels = [paired_sample[cumsum_idx[i+1] - j - 1]['label'] for i in range(n_ways)
                         for j in range(cnt_query[i])]
-        
-    query_cls_idx = [[paired_sample[cumsum_idx[i+1] - j - 1]['basic_class_id']] for i in range(n_ways)
-                    for j in range(cnt_query[i])]
+    
     
     ###### Generate query label (class indices in one episode, i.e. the ground truth)######
-    query_labels_tmp = [torch.zeros_like(x) for x in query_labels]
-    for i, query_label_tmp in enumerate(query_labels_tmp):
-        query_label_tmp[query_labels[i] == 128] = 1
-        query_label_tmp[query_labels[i] == 255] = 2
+    count = 0
+    for i in range(n_ways):
+        for j in range(cnt_query[i]):
+            query_label_tmp = query_labels[count]
+            query_label_tmp[query_label_tmp == 128] = i * 2 + 1
+            query_label_tmp[query_label_tmp == 255] = i * 2 + 2
+            count += 1
     
     ###### Generate support image masks (including FG, Contour, and BG) ######
     support_mask = [[getCellMask(support_labels[way][shot])
@@ -252,9 +253,9 @@ def cell_fewShot(paired_sample, n_ways, n_shots, cnt_query):
 
             'query_images_t': query_images_t,
             'query_images': query_images,
-            'query_labels': query_labels_tmp,
+            'query_labels': query_labels,
             'query_masks': query_masks,
-            'query_cls_idx': query_cls_idx,
+            'cnt_query': cnt_query,
            }
 
 
