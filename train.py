@@ -162,9 +162,12 @@ def main(_run, _config, _log):
 
             # Forward and Backward
             optimizer.zero_grad()
-            query_pred, align_loss = model(support_images, support_fg_mask, support_contour_mask, support_bg_mask,
+            if _config['model']['align']:
+                query_pred, align_loss, support_pred = model(support_images, support_fg_mask, support_contour_mask, support_bg_mask,
                                         query_images, cnt_query)
-
+            else:
+                query_pred, align_loss = model(support_images, support_fg_mask, support_contour_mask, support_bg_mask,
+                                        query_images, cnt_query)
         else:
             # Prepare input
             support_images = [[shot.cuda() for shot in way]
@@ -209,8 +212,10 @@ def main(_run, _config, _log):
         if (i_iter + 1) % _config['tbplot_interval'] == 0:
             loss = log_loss['loss'] / (i_iter + 1)
             align_loss = log_loss['align_loss'] / (i_iter + 1)
-            logger.write(i_iter, {'loss':loss ,'align_loss': align_loss}, sample_batched, query_pred)
-
+            if _config['model']['align']:
+                logger.write(i_iter, {'loss':loss ,'align_loss': align_loss}, sample_batched, query_pred, support_pred)
+            else:
+                logger.write(i_iter, {'loss':loss ,'align_loss': align_loss}, sample_batched, query_pred)
         if (i_iter + 1) % _config['save_pred_every'] == 0:
             _log.info('###### Taking snapshot ######')
             torch.save(model.state_dict(),

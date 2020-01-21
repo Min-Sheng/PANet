@@ -18,16 +18,17 @@ class BaseLogger:
         """
         self.writer = SummaryWriter(log_dir)
 
-    def write(self, iter_, log, sample_batched, query_pred):
+    def write(self, iter_, log, sample_batched, query_pred, support_pred=None):
         """Plot the network architecture and the visualization results.
         Args:
             iter_ (int): The number of trained iteration.
             log (dict): The log information.
             sample_batched (dict): The sample batch.
-            query_pred (sequence of torch.Tensor): The query prediction.
+            query_pred (torch.Tensor): The query prediction.
+            support_pred (torch.Tensor): The support prediction.
         """
         self._add_scalars(iter_, log)
-        self._add_images(iter_, sample_batched, query_pred)
+        self._add_images(iter_, sample_batched, query_pred, support_pred)
 
     def close(self):
         """Close the writer.
